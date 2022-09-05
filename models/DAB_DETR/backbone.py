@@ -10,10 +10,12 @@
 # Modified from DETR (https://github.com/facebookresearch/detr)
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 # ------------------------------------------------------------------------
+
 """
 Backbone modules.
 """
-from collections import OrderedDict
+
+# from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
@@ -40,20 +42,24 @@ class FrozenBatchNorm2d(torch.nn.Module):
 
     def __init__(self, n):
         super(FrozenBatchNorm2d, self).__init__()
+
         self.register_buffer("weight", torch.ones(n))
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))
         self.register_buffer("running_var", torch.ones(n))
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict,
+        missing_keys, unexpected_keys, error_msgs
+    ):
         num_batches_tracked_key = prefix + 'num_batches_tracked'
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
         super(FrozenBatchNorm2d, self)._load_from_state_dict(
             state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
+            missing_keys, unexpected_keys, error_msgs
+        )
 
     def forward(self, x):
         # move reshapes to the beginning
@@ -62,45 +68,56 @@ class FrozenBatchNorm2d(torch.nn.Module):
         b = self.bias.reshape(1, -1, 1, 1)
         rv = self.running_var.reshape(1, -1, 1, 1)
         rm = self.running_mean.reshape(1, -1, 1, 1)
+        
         eps = 1e-5
         scale = w * (rv + eps).rsqrt()
         bias = b - rm * scale
+
         return x * scale + bias
 
 
 class BackboneBase(nn.Module):
-
     def __init__(self, backbone: nn.Module, train_backbone: bool, num_channels: int, return_interm_layers: bool):
         super().__init__()
+
         for name, parameter in backbone.named_parameters():
             if not train_backbone or 'layer2' not in name and 'layer3' not in name and 'layer4' not in name:
                 parameter.requires_grad_(False)
+        
         if return_interm_layers:
             return_layers = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
         else:
             return_layers = {'layer4': "0"}
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
+        
         self.num_channels = num_channels
 
     def forward(self, tensor_list: NestedTensor):
         xs = self.body(tensor_list.tensors)
+        m = tensor_list.mask
+        assert m is not None
+
         out: Dict[str, NestedTensor] = {}
+        # 收集各层特征，并将 mask 插值到特征图大小
         for name, x in xs.items():
-            m = tensor_list.mask
-            assert m is not None
+            # m = tensor_list.mask
+            # assert m is not None
             mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
             out[name] = NestedTensor(x, mask)
+        
         return out
 
 
 class Backbone(BackboneBase):
     """ResNet backbone with frozen BatchNorm."""
+
     def __init__(self, name: str,
                  train_backbone: bool,
                  return_interm_layers: bool,
                  dilation: bool,
                  batch_norm=FrozenBatchNorm2d):
         if name in ['resnet18', 'resnet34', 'resnet50', 'resnet101']:
+            # 'pretrained=is_main_process()' 使得只有主进程才加载模型权重，其余进程从主进程中同步即可
             backbone = getattr(torchvision.models, name)(
                 replace_stride_with_dilation=[False, False, dilation],
                 pretrained=is_main_process(), norm_layer=batch_norm)
@@ -108,6 +125,7 @@ class Backbone(BackboneBase):
             imgsize = int(name.split('_')[-2])
             backbone = build_swin_transformer(name, imgsize)
         num_channels = 512 if name in ('resnet18', 'resnet34') else 2048
+
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
 
 
@@ -117,9 +135,11 @@ class Joiner(nn.Sequential):
 
     def forward(self, tensor_list: NestedTensor):
         xs = self[0](tensor_list)
+        
         out: List[NestedTensor] = []
         pos = []
-        for name, x in xs.items():
+        for _, x in xs.items():
+            # x 是 tensor 和 mask 的结合
             out.append(x)
             # position encoding
             pos.append(self[1](x).to(x.tensors.dtype))
@@ -129,9 +149,10 @@ class Joiner(nn.Sequential):
 
 def build_backbone(args):
     position_embedding = build_position_encoding(args)
-    train_backbone = args.lr_backbone > 0
 
+    train_backbone = args.lr_backbone > 0
     return_interm_layers = args.masks
+
     # if args.batch_norm_type == 'FrozenBatchNorm2d':
     #     batch_norm = FrozenBatchNorm2d
     # elif args.batch_norm_type == 'SyncBatchNorm':
@@ -141,8 +162,13 @@ def build_backbone(args):
     # else:
     #     raise NotImplementedError("Unknown batch norm name: {}".format(args.batch_norm_type))
 
-    backbone = Backbone(args.backbone, train_backbone, return_interm_layers, args.dilation,     
-                            batch_norm=FrozenBatchNorm2d)
+    backbone = Backbone(
+        args.backbone, train_backbone, return_interm_layers, args.dilation,     
+        batch_norm=FrozenBatchNorm2d
+    )
+
+    # 实质就是 torch.nn.Sequential(backbone, position_embedding) 
     model = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
+
     return model

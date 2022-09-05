@@ -290,11 +290,13 @@ def collate_fn(batch):
 
 
 def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
+    """ 输入是多个图像的 shape, 返回每个维度上的最大值。 """
+    # (List[List[int]]) -> List[int]
     maxes = the_list[0]
     for sublist in the_list[1:]:
         for index, item in enumerate(sublist):
             maxes[index] = max(maxes[index], item)
+
     return maxes
 
 
@@ -304,20 +306,25 @@ class NestedTensor(object):
         self.mask = mask
         if mask == 'auto':
             self.mask = torch.zeros_like(tensors).to(tensors.device)
+            # 去掉通道维度
             if self.mask.dim() == 3:
                 self.mask = self.mask.sum(0).to(bool)
             elif self.mask.dim() == 4:
                 self.mask = self.mask.sum(1).to(bool)
             else:
-                raise ValueError("tensors dim must be 3 or 4 but {}({})".format(self.tensors.dim(), self.tensors.shape))
+                raise ValueError(
+                    "tensors dim must be 3 or 4 but {}({})".format(self.tensors.dim(), self.tensors.shape)
+                )
 
     def imgsize(self):
+        """ 计算每张图片非 padding 部分的宽、高 """
         res = []
         for i in range(self.tensors.shape[0]):
             mask = self.mask[i]
             maxH = (~mask).sum(0).max()
             maxW = (~mask).sum(1).max()
             res.append(torch.Tensor([maxH, maxW]))
+
         return res
 
     def to(self, device):
@@ -325,17 +332,22 @@ class NestedTensor(object):
         cast_tensor = self.tensors.to(device)
         mask = self.mask
         if mask is not None:
-            assert mask is not None
+            # 都已经进入 'mask is not None' 分支了，还 assert 有何意义..
+            # assert mask is not None
             cast_mask = mask.to(device)
         else:
             cast_mask = None
+
         return NestedTensor(cast_tensor, cast_mask)
 
     def to_img_list_single(self, tensor, mask):
+        """ 返回图像真实有效的部分(i.e. 去掉 padding 部分) """
         assert tensor.dim() == 3, "dim of tensor should be 3 but {}".format(tensor.dim())
+
         maxH = (~mask).sum(0).max()
         maxW = (~mask).sum(1).max()
         img = tensor[:, :maxH, :maxW]
+
         return img
 
     def to_img_list(self):
@@ -344,6 +356,7 @@ class NestedTensor(object):
         Returns:
             [type]: [description]
         """
+
         if self.tensors.dim() == 3:
             return self.to_img_list_single(self.tensors, self.mask)
         else:
@@ -352,6 +365,7 @@ class NestedTensor(object):
                 tensor_i = self.tensors[i]
                 mask_i = self.mask[i]
                 res.append(self.to_img_list_single(tensor_i, mask_i))
+
             return res
 
     @property
@@ -373,6 +387,7 @@ class NestedTensor(object):
 
 
 def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+    """ 将一组 tensor(List[torch.Tensor]) 转换成 NestedTensor 对象 """
     # TODO make this more general
     if tensor_list[0].ndim == 3:
         if torchvision._is_tracing():
@@ -384,16 +399,21 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
         # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
         batch_shape = [len(tensor_list)] + max_size
-        b, c, h, w = batch_shape
+        b, _, h, w = batch_shape
+
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
+
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
         mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+
         for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], :img.shape[2]] = False
+            # img.shape: (channel,height,width)
+            pad_img[:img.shape[0], :img.shape[1], :img.shape[2]].copy_(img)
+            m[:img.shape[1], :img.shape[2]] = False
     else:
         raise ValueError('not supported')
+
     return NestedTensor(tensor, mask)
 
 
@@ -534,6 +554,7 @@ def accuracy(output, target, topk=(1,)):
     for k in topk:
         correct_k = correct[:k].view(-1).float().sum(0)
         res.append(correct_k.mul_(100.0 / batch_size))
+
     return res
 
 
@@ -576,7 +597,8 @@ def inverse_sigmoid(x, eps=1e-3):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1/x2)
+
+    return torch.log(x1 / x2)
 
 def clean_state_dict(state_dict):
     new_state_dict = OrderedDict()
@@ -584,4 +606,5 @@ def clean_state_dict(state_dict):
         if k[:7] == 'module.':
             k = k[7:]  # remove `module.`
         new_state_dict[k] = v
+        
     return new_state_dict

@@ -1,23 +1,21 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+
 import argparse
 import datetime
 import json
-
-
 
 import random
 import time
 from pathlib import Path
 import os, sys
-from typing import Optional
-
+# from typing import Optional
 
 from util.logger import setup_logger
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
-import torch.distributed as dist
+# import torch.distributed as dist
 
 import datasets
 import util.misc as utils
@@ -30,7 +28,7 @@ from util.utils import clean_state_dict
 def get_args_parser():
     parser = argparse.ArgumentParser('DAB-DETR', add_help=False)
     
-    # about lr
+    # About lr
     parser.add_argument('--lr', default=1e-4, type=float, 
                         help='learning rate')
     parser.add_argument('--lr_backbone', default=1e-5, type=float, 
@@ -89,10 +87,10 @@ def get_args_parser():
     parser.add_argument('--transformer_activation', default='prelu', type=str)
     parser.add_argument('--num_patterns', default=0, type=int, 
                         help='number of pattern embeddings. See Anchor DETR for more details.')
-    parser.add_argument('--random_refpoints_xy', action='store_true', 
+    parser.add_argument('--random_refpoints_xy', action='store_true',
                         help="Random init the x,y of anchor boxes and freeze them.")
 
-    # for DAB-Deformable-DETR
+    # For DAB-Deformable-DETR
     parser.add_argument('--two_stage', default=False, action='store_true', 
                         help="Using two stage variant for DAB-Deofrmable-DETR")
     parser.add_argument('--num_feature_levels', default=4, type=int, 
@@ -110,6 +108,7 @@ def get_args_parser():
     # Loss
     parser.add_argument('--no_aux_loss', dest='aux_loss', action='store_false',
                         help="Disables auxiliary decoding losses (loss at each layer)")
+
     # * Matcher
     parser.add_argument('--set_cost_class', default=2, type=float, 
                         help="Class coefficient in the matching cost")
@@ -117,6 +116,7 @@ def get_args_parser():
                         help="L1 box coefficient in the matching cost")
     parser.add_argument('--set_cost_giou', default=2, type=float,
                         help="giou box coefficient in the matching cost")
+
     # * Loss coefficients
     parser.add_argument('--cls_loss_coef', default=1, type=float, 
                         help="loss coefficient for cls")
@@ -134,7 +134,7 @@ def get_args_parser():
                         help="alpha for focal loss")
 
 
-    # dataset parameters
+    # Dataset parameters
     parser.add_argument('--dataset_file', default='coco')
     parser.add_argument('--coco_path', type=str, required=True)
     parser.add_argument('--coco_panoptic_path', type=str)
@@ -165,7 +165,7 @@ def get_args_parser():
     parser.add_argument('--save_log', action='store_true', 
                         help="If save the training prints to the log file.")
 
-    # distributed training parameters
+    # Distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
@@ -174,6 +174,7 @@ def get_args_parser():
     parser.add_argument("--local_rank", type=int, help='local rank for DistributedDataParallel')
     parser.add_argument('--amp', action='store_true',
                         help="Train with mixed precision")
+
     return parser
 
 
@@ -310,7 +311,6 @@ def main(args):
         logger.info(str(_load_output))
         # import ipdb; ipdb.set_trace()
 
-
     if args.eval:
         os.environ['EVAL_FLAG'] = 'TRUE'
         test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
@@ -397,12 +397,10 @@ def main(args):
     print("Now time: {}".format(str(datetime.datetime.now())))
 
 
-
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('DETR training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+
     main(args)

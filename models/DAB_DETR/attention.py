@@ -21,7 +21,7 @@ Mostly copy-paste from https://github.com/pytorch/pytorch/blob/master/torch/nn/m
 and https://github.com/pytorch/pytorch/blob/master/torch/nn/functional.py#L4837
 """
 
-import copy
+# import copy
 from typing import Optional, List
 
 import torch
@@ -34,15 +34,14 @@ from typing import Tuple, Optional
 import torch
 from torch import Tensor
 from torch.nn.modules.linear import Linear
-from torch.nn.init import xavier_uniform_
+# from torch.nn.init import xavier_uniform_
 from torch.nn.init import constant_
-from torch.nn.init import xavier_normal_
-from torch.nn.parameter import Parameter
+# from torch.nn.parameter import Parameter
 from torch.nn.modules.module import Module
 from torch.nn import functional as F
 
 import warnings
-import math
+# import math
 
 from torch._C import _infer_size, _add_docstr
 from torch.nn import _reduction as _Reduction
@@ -58,6 +57,7 @@ except:
 Tensor = torch.Tensor
 
 from torch.nn.functional import linear, pad, softmax, dropout
+
 
 class MultiheadAttention(Module):
     r"""Allows the model to jointly attend to information
@@ -261,6 +261,7 @@ def multi_head_attention_forward(query: Tensor,
         - attn_output_weights: :math:`(N, L, S)` where N is the batch size,
           L is the target sequence length, S is the source sequence length.
     """
+
     if not torch.jit.is_scripting():
         tens_ops = (query, key, value, in_proj_weight, in_proj_bias, bias_k, bias_v,
                     out_proj_weight, out_proj_bias)
@@ -274,6 +275,7 @@ def multi_head_attention_forward(query: Tensor,
                 use_separate_proj_weight=use_separate_proj_weight,
                 q_proj_weight=q_proj_weight, k_proj_weight=k_proj_weight,
                 v_proj_weight=v_proj_weight, static_k=static_k, static_v=static_v)
+
     tgt_len, bsz, embed_dim = query.size()
     assert embed_dim == embed_dim_to_check
     # allow MHA to have different sizes for the feature dimension
@@ -371,7 +373,7 @@ def multi_head_attention_forward(query: Tensor,
     if key_padding_mask is not None:
         attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
         attn_output_weights = attn_output_weights.masked_fill(
-            key_padding_mask.unsqueeze(1).unsqueeze(2),
+            key_padding_mask.unsqueeze(1).unsqueeze(2),  # (bsz,src_len)->(bsz,1,1,src_len)
             float('-inf'),
         )
         attn_output_weights = attn_output_weights.view(bsz * num_heads, tgt_len, src_len)
